@@ -25,6 +25,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace autoware::static_centerline_generator
@@ -35,14 +36,13 @@ public:
   OptimizationTrajectoryBasedCenterline() = default;
   explicit OptimizationTrajectoryBasedCenterline(rclcpp::Node & node);
   std::vector<TrajectoryPoint> generate_centerline_with_optimization(
-    rclcpp::Node & node, std::shared_ptr<RouteHandler> & route_handler_ptr_,
-    const std::vector<lanelet::Id> & route_lane_ids, LaneletMapBin::ConstSharedPtr & map_bin_ptr_);
+    rclcpp::Node & node, std::shared_ptr<RouteHandler> & route_handler_ptr,
+    const std::vector<lanelet::Id> & route_lane_ids, LaneletMapBin::ConstSharedPtr & map_bin_ptr);
 
 private:
   std::vector<TrajectoryPoint> optimize_trajectory(
     const PathWithLaneId & raw_path_with_lane_id, const Path & raw_path,
-    std::shared_ptr<RouteHandler> & route_handler_ptr_,
-    LaneletMapBin::ConstSharedPtr & map_bin_ptr_,
+    std::shared_ptr<RouteHandler> & route_handler_ptr, LaneletMapBin::ConstSharedPtr & map_bin_ptr,
     const Pose & start_pose, const Pose & goal_pose) const;
 
   // publisher
@@ -53,25 +53,25 @@ private:
   std::pair<Pose, Pose> get_start_and_goal_pose(
     rclcpp::Node & node, const RouteHandler & route_handler,
     const std::vector<lanelet::Id> & route_lane_ids) const;
-  std::shared_ptr<autoware_planning_msgs::msg::LaneletRoute> create_route_ptr(
-    std::shared_ptr<RouteHandler> & route_handler_ptr_,
-    const Pose & start_pose, const Pose & goal_pose) const;
+  std::shared_ptr<autoware_planning_msgs::msg::LaneletRoute> create_route(
+    std::shared_ptr<RouteHandler> & route_handler_ptr, const geometry_msgs::msg::Pose & start_pose,
+    const geometry_msgs::msg::Pose & goal_pose) const;
   std::shared_ptr<autoware::path_generator::PathGenerator> create_path_generator_node(
-    const Pose current_pose, LaneletMapBin::ConstSharedPtr & map_bin_ptr_)
-    const;
-  std::shared_ptr<autoware::behavior_path_planner::PlannerData> create_planner_data(
-    std::shared_ptr<RouteHandler> & route_handler_ptr_) const;
-  std::shared_ptr<autoware::behavior_path_planner::DefaultFixedGoalPlanner> create_fixed_goal_planner(
-    const PathWithLaneId & raw_path_with_lane_id) const;
+    const geometry_msgs::msg::Pose current_pose, LaneletMapBin::ConstSharedPtr & map_bin_ptr,
+    std::shared_ptr<autoware_planning_msgs::msg::LaneletRoute> route_ptr) const;
+  std::shared_ptr<autoware::behavior_path_planner::PlannerData> create_behavior_path_planner_data(
+    std::shared_ptr<RouteHandler> & route_handler_ptr) const;
+  std::shared_ptr<autoware::behavior_path_planner::DefaultFixedGoalPlanner>
+  create_fixed_goal_planner(const PathWithLaneId & raw_path_with_lane_id) const;
   path_generator::Params create_params(
     std::shared_ptr<autoware::path_generator::PathGenerator> & path_generator_node) const;
 
-  PathWithLaneId goal_path_generate(
+  PathWithLaneId modify_goal_connection(
     const PathWithLaneId & raw_path_with_lane_id, const Path & raw_path,
     std::shared_ptr<RouteHandler> & route_handler_ptr, LaneletMapBin::ConstSharedPtr & map_bin_ptr,
-  const Pose & start_pose, const Pose & goal_pose) const;
+    const Pose & start_pose, const Pose & goal_pose) const;
 
-  std::shared_ptr<autoware_planning_msgs::msg::LaneletRoute> route_ptr_;
+  std::shared_ptr<autoware_planning_msgs::msg::LaneletRoute> route_ptr;
   std::string goal_method;
   double refine_goal_search_radius_range;
 };
