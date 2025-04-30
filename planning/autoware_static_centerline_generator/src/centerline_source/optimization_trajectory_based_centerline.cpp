@@ -186,8 +186,9 @@ std::vector<TrajectoryPoint> OptimizationTrajectoryBasedCenterline::optimize_tra
 
     // road collision avoidance by model predictive trajectory in the autoware_path_optimizer
     // package
+    const auto path_points = convert_to_path(path_with_lane_id_points);
     const autoware::path_optimizer::PlannerData planner_data{
-      raw_path.header, smoothed_traj_points, raw_path.left_bound, raw_path.right_bound,
+      path_points.header, smoothed_traj_points, path_points.left_bound, path_points.right_bound,
       virtual_ego_pose};
     const auto optimized_traj_points = mpt_optimizer_ptr->optimizeTrajectory(planner_data);
 
@@ -222,10 +223,10 @@ Pose OptimizationTrajectoryBasedCenterline::get_pose(
   // get pose
   const std::vector<double> input =
     autoware::universe_utils::getOrDeclareParameter<std::vector<double>>(node, dec_param);
-  const bool default_check =
+  const bool is_default =
     std::all_of(input.begin(), input.end(), [](double x) { return x == 0.0; });
 
-  if (!default_check) {
+  if (!is_default) {
     return utils::create_pose(input[0], input[1], input[2], input[3], input[4], input[5], input[6]);
   }
   if (dec_param == "start_pose") {

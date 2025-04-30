@@ -99,15 +99,15 @@ geometry_msgs::msg::Pose get_center_pose(
 
   // get middle position of the lanelet
   geometry_msgs::msg::Point middle_pos;
-  middle_pos.x = center_line[middle_point_idx].x();
-  middle_pos.y = center_line[middle_point_idx].y();
-  middle_pos.z = center_line[middle_point_idx].z();
+  middle_pos.x = center_line[middle_point_idx - 1].x();
+  middle_pos.y = center_line[middle_point_idx - 1].y();
+  middle_pos.z = center_line[middle_point_idx - 1].z();
 
   // get next middle position of the lanelet
   geometry_msgs::msg::Point next_middle_pos;
-  next_middle_pos.x = center_line[middle_point_idx + 1].x();
-  next_middle_pos.y = center_line[middle_point_idx + 1].y();
-  next_middle_pos.z = center_line[middle_point_idx + 1].z();
+  next_middle_pos.x = center_line[middle_point_idx].x();
+  next_middle_pos.y = center_line[middle_point_idx].y();
+  next_middle_pos.z = center_line[middle_point_idx].z();
 
   // calculate middle pose
   geometry_msgs::msg::Pose middle_pose;
