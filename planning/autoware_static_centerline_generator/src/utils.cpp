@@ -207,6 +207,11 @@ void update_centerline(
       traj_idx == new_centerline.size() - 1 ||
       centerline_lane_id != centerline_lane_ids.at(traj_idx + 1)) {
       const auto & centerline = centerline_map.at(centerline_lane_id);
+      std::cerr << "centerline size: " << centerline.size() << std::endl;
+      if (centerline.size() < 2) {
+        std::cerr << "skip" << std::endl;
+        continue;
+      }
       lanelet_map_ptr->add(centerline);
       lanelet_ref.setCenterline(centerline);
     }
