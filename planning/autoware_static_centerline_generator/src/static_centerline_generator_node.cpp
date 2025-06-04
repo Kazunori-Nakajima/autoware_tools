@@ -46,6 +46,7 @@
 #include <glog/logging.h>
 #include <lanelet2_core/LaneletMap.h>
 #include <lanelet2_core/geometry/Lanelet.h>
+#include <lanelet2_core/geometry/LineString.h>
 #include <lanelet2_io/Io.h>
 #include <lanelet2_projection/UTM.h>
 
@@ -342,6 +343,86 @@ void StaticCenterlineGeneratorNode::generate_centerline()
   visualize_selected_centerline();
 }
 
+void StaticCenterlineGeneratorNode::mergeExistingCenterline(
+  std::vector<TrajectoryPoint>& new_centerline,
+  const lanelet::ConstLineString3d&  already_centerline_string) {
+
+  if (new_centerline.empty() || already_centerline_string.empty()) return;
+
+  // 既存のセンターラインをTrajectoryPointsに変換
+  std::vector<TrajectoryPoint> existing_points;
+  for (size_t i = 0; i < already_centerline_string.size(); ++i) {  // インデックスiを定義
+    const auto& point = already_centerline_string[i];
+    TrajectoryPoint tp;
+    tp.pose.position.x = point.x();
+    tp.pose.position.y = point.y();
+    tp.pose.position.z = point.z();
+
+    // 姿勢の計算
+    if (already_centerline_string.size() == 1) {
+      // 点が1つしかない場合は新規センターラインの最初の点の向きを使用
+      if (!new_centerline.empty()) {
+        tp.pose.orientation = new_centerline.front().pose.orientation;
+      }
+    } else if (i == 0) {
+      // 最初のポイントは次のポイントとの方向を使用
+      const auto& next_point = already_centerline_string[1];
+      const double yaw = std::atan2(
+        next_point.y() - point.y(),
+        next_point.x() - point.x());
+      tp.pose.orientation = autoware::universe_utils::createQuaternionFromYaw(yaw);
+    } else if (i == already_centerline_string.size() - 1) {
+      // 最後のポイントは前のポイントとの方向を使用
+      const auto& prev_point = already_centerline_string[i - 1];
+      const double yaw = std::atan2(
+        point.y() - prev_point.y(),
+        point.x() - prev_point.x());
+      tp.pose.orientation = autoware::universe_utils::createQuaternionFromYaw(yaw);
+    } else {
+      // 中間点は前後のポイントから方向を計算
+      const auto& next_point = already_centerline_string[i + 1];
+      const double yaw = std::atan2(
+        next_point.y() - point.y(),
+        next_point.x() - point.x());
+      tp.pose.orientation = autoware::universe_utils::createQuaternionFromYaw(yaw);
+    }
+    existing_points.push_back(tp);
+  }
+
+  // 既存センターラインの終端と新規センターラインの各点との距離を計算し、最も近い点を見つける
+  const auto& base_point = existing_points.back();
+  size_t closest_idx = 0;
+  double min_distance = std::numeric_limits<double>::max();
+  
+  for (size_t i = 0; i < new_centerline.size(); ++i) {
+    const auto& new_point = new_centerline[i];
+    const auto lanelet_base_point = convert_to_lanelet_point(base_point.pose.position);
+    const auto lanelet_new_point = convert_to_lanelet_point(new_point.pose.position);
+    const double distance = lanelet::geometry::distance2d(lanelet_base_point, lanelet_new_point);
+    
+    if (distance < min_distance) {
+      min_distance = distance;
+      closest_idx = i;
+    }
+  }
+
+  // 既存センターラインを新規センターラインに挿入
+  new_centerline.erase(new_centerline.begin(), new_centerline.begin() + closest_idx + 1);
+  new_centerline.insert(
+    new_centerline.begin(),
+    existing_points.begin(),
+    existing_points.end());
+
+  for (size_t i = 0; i < existing_points.size(); ++i) {
+    std::cerr << "existing_points.at(i).pose.position.x: " << existing_points.at(i).pose.position.x << std::endl;
+    std::cerr << "existing_points.at(i).pose.position.y: " << existing_points.at(i).pose.position.y << std::endl;
+  }
+  for (size_t i = 0; i < new_centerline.size(); ++i) {
+    std::cerr << "new_centerline.at(i).pose.position.x: " << new_centerline.at(i).pose.position.x << std::endl;
+    std::cerr << "new_centerline.at(i).pose.position.y: " << new_centerline.at(i).pose.position.y << std::endl;
+  }
+}
+
 CenterlineWithRoute StaticCenterlineGeneratorNode::generate_whole_centerline_with_route()
 {
   if (!route_handler_ptr_) {
@@ -367,6 +448,20 @@ CenterlineWithRoute StaticCenterlineGeneratorNode::generate_whole_centerline_wit
     throw std::logic_error(
       "The centerline source is not supported in autoware_static_centerline_generator.");
   }();
+
+  for (size_t i = 0; i < centerline_with_route.centerline.size(); ++i) {
+    std::cerr << "centerline_with_route.centerline.at(i).pose.position.x: " << centerline_with_route.centerline.at(i).pose.position.x << std::endl;
+    std::cerr << "centerline_with_route.centerline.at(i).pose.position.y: " << centerline_with_route.centerline.at(i).pose.position.y << std::endl;
+  }
+
+  // merge existing centerline
+  const auto& route = centerline_with_route.route;
+  const auto route_lanelets = utils::get_lanelets_from_route(*route_handler_ptr_, route);
+  const auto& first_lanelet = route_lanelets.front();
+  if (first_lanelet.hasCustomCenterline()) {
+    const auto first_centerline = first_lanelet.centerline();
+    mergeExistingCenterline(centerline_with_route.centerline, first_centerline);
+  }
 
   // resample
   const double output_trajectory_interval = declare_parameter<double>("output_trajectory_interval");
@@ -651,66 +746,66 @@ void StaticCenterlineGeneratorNode::connect_centerline_to_lanelet()
   const auto route = centerline_handler_.get_route();
   const auto route_lanelets = utils::get_lanelets_from_route(*route_handler_ptr_, route);
 
-  // 1. calculate the lanelet of the centerline's front.
-  std::optional<size_t> centerline_front_lanelet_idx{std::nullopt};
-  for (size_t i = 0; i < route_lanelets.size(); ++i) {
-    const auto & lanelet = route_lanelets.at(i);
-    const bool is_inside =
-      lanelet::geometry::inside(lanelet, convert_to_lanelet_point(centerline.at(0).pose.position));
-    if (is_inside) {
-      centerline_front_lanelet_idx = i;
-      break;
-    }
-  }
+  std::vector<TrajectoryPoint> valid_centerline;
+  std::vector<lanelet::Id> valid_lane_ids;
 
-  // 2. update centerline_lane_ids in centerline_handler_
-  size_t centerline_idx = 0;
-  bool is_end_lanelet = false;
-  bool was_once_inside_lanelet = false;
-  for (size_t lanelet_idx = centerline_front_lanelet_idx ? centerline_front_lanelet_idx.value() : 0;
-       lanelet_idx < route_lanelets.size(); ++lanelet_idx) {
-    const auto & lanelet = route_lanelets.at(lanelet_idx);
+  // 各centerlineポイントに対して処理
+  for (size_t centerline_idx = 0; centerline_idx < centerline.size(); ++centerline_idx) {
+    const auto& current_point = centerline.at(centerline_idx);
+    bool point_found_lanelet = false;
 
-    while (true) {
-      // check if target point is inside the lanelet
+    // 各laneletに対してチェック
+    for (const auto& lanelet : route_lanelets) {
       const bool is_inside = lanelet::geometry::inside(
-        lanelet, convert_to_lanelet_point(centerline.at(centerline_idx).pose.position));
+        lanelet, convert_to_lanelet_point(current_point.pose.position));
+
+      RCLCPP_INFO(get_logger(), 
+        "Checking point %zu in lanelet %ld: is_inside=%d, point=(%.2f, %.2f)", 
+        centerline_idx, 
+        lanelet.id(),
+        is_inside ? 1 : 0,
+        current_point.pose.position.x,
+        current_point.pose.position.y);
+
       if (is_inside) {
-        was_once_inside_lanelet = true;
-      }
-
-      const bool is_target_lanelet = [&]() {
-        if (!centerline_front_lanelet_idx && !was_once_inside_lanelet) {
-          // If the centerline's front is before the route_lanelets, use the first
-          // lane in the route_lanelets as a target.
-          return true;
-        }
-        return is_inside;
-      }();
-      if (!is_target_lanelet) {
-        break;
-      }
-
-      // register the lane of the centerline point.
-      centerline_handler_.add_centerline_lane_id(lanelet.id());
-      centerline_idx++;
-
-      if (centerline_idx == centerline.size()) {
-        is_end_lanelet = true;
-        break;
+        valid_centerline.push_back(current_point);
+        valid_lane_ids.push_back(lanelet.id());
+        point_found_lanelet = true;
+        break;  // このポイントが属するlaneletが見つかったら次のポイントへ
       }
     }
 
-    if (is_end_lanelet) {
-      break;
+    if (!point_found_lanelet) {
+      RCLCPP_WARN(get_logger(), 
+        "Point %zu (%.2f, %.2f) is not inside any lanelet", 
+        centerline_idx,
+        current_point.pose.position.x,
+        current_point.pose.position.y);
     }
   }
 
-  if (centerline.size() != centerline_handler_.get_centerline_lane_ids().size()) {
-    RCLCPP_ERROR_STREAM(
+  // 有効なポイントとlane_idsで更新
+  if (!valid_centerline.empty()) {
+    // centerline_handler_を新しい有効なセンターラインで更新
+    centerline_handler_ = CenterlineHandler(
+      CenterlineWithRoute{valid_centerline, route});
+    
+    // lane_idsを追加
+    for (const auto& lane_id : valid_lane_ids) {
+      centerline_handler_.add_centerline_lane_id(lane_id);
+    }
+  }
+
+  RCLCPP_INFO(get_logger(), 
+    "Processed %zu points, found %zu valid points", 
+    centerline.size(), 
+    valid_centerline.size());
+
+  if (valid_centerline.size() != centerline_handler_.get_centerline_lane_ids().size()) {
+    RCLCPP_WARN_STREAM(
       get_logger(), "The size of the centerline and its lanelets is not the same. "
-                      << centerline.size() << " "
-                      << centerline_handler_.get_centerline_lane_ids().size());
+                      << "Original size: " << centerline.size() 
+                      << ", Valid size: " << centerline_handler_.get_centerline_lane_ids().size());
   }
 }
 

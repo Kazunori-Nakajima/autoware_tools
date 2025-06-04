@@ -33,6 +33,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <eigen3/Eigen/Core>
 
 namespace autoware::static_centerline_generator
 {
@@ -114,6 +115,11 @@ public:
   void save_map();
 
 private:
+  // 新しいメンバー関数
+  void mergeExistingCenterline(
+    std::vector<TrajectoryPoint>& new_centerline,
+    const lanelet::ConstLineString3d&  already_centerline);
+
   // load map
   void load_map(const std::string & lanelet2_input_file_path);
   void on_load_map(
