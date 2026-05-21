@@ -79,6 +79,22 @@ Statistics calculate_statistics(const Container & values)
   return stats;
 }
 
+/** @param sorted Ascending-sorted samples. @param percentile In [0, 1] (e.g. 0.95). */
+inline double compute_percentile(const std::vector<double> & sorted, const double percentile)
+{
+  if (sorted.empty()) {
+    return 0.0;
+  }
+  if (sorted.size() == 1) {
+    return sorted.front();
+  }
+  const double index = percentile * static_cast<double>(sorted.size() - 1);
+  const size_t lower = static_cast<size_t>(std::floor(index));
+  const size_t upper = std::min(lower + 1, sorted.size() - 1);
+  const double fraction = index - static_cast<double>(lower);
+  return sorted[lower] * (1.0 - fraction) + sorted[upper] * fraction;
+}
+
 }  // namespace metrics
 
 #endif  // METRICS__METRIC_TYPES_HPP_
