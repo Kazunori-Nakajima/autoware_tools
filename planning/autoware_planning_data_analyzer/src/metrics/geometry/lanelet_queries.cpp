@@ -17,7 +17,6 @@
 #include "lanelet_geometry.hpp"
 
 #include <autoware/lanelet2_utils/geometry.hpp>
-#include <autoware/lanelet2_utils/intersection.hpp>
 #include <autoware_utils_math/normalization.hpp>
 
 #include <boost/geometry.hpp>
@@ -209,9 +208,36 @@ autoware_utils_geometry::LineString2d to_linestring2d(const lanelet::ConstLineSt
 bool is_pose_in_intersection(
   const geometry_msgs::msg::Pose & pose, const std::shared_ptr<RouteHandler> & route_handler)
 {
-  const auto lanelet = find_reference_lanelet(pose, route_handler);
-  return lanelet.has_value() &&
-         autoware::experimental::lanelet2_utils::is_intersection_lanelet(*lanelet);
+  if (!route_handler || !route_handler->isMapMsgReady()) {
+    return false;
+  }
+
+  const autoware_utils_geometry::Point2d search_point{pose.position.x, pose.position.y};
+  const auto intersection_areas = collect_local_intersection_areas(pose, route_handler);
+  return std::any_of(
+    intersection_areas.begin(), intersection_areas.end(),
+    [&search_point](const auto & polygon) { return point_in_polygon(search_point, polygon); });
+}
+
+std::vector<lanelet::ConstPolygon3d> collect_intersection_areas_in_bbox(
+  const lanelet::BoundingBox2d & bbox, const std::shared_ptr<RouteHandler> & route_handler)
+{
+  std::vector<lanelet::ConstPolygon3d> intersection_areas;
+  if (!route_handler || !route_handler->isMapMsgReady()) {
+    return intersection_areas;
+  }
+
+  const auto map = route_handler->getLaneletMapPtr();
+  std::unordered_set<lanelet::Id> seen_ids;
+  for (const auto & polygon : map->polygonLayer.search(bbox)) {
+    const std::string type = polygon.attributeOr(lanelet::AttributeName::Type, "none");
+    if (type != "intersection_area") {
+      continue;
+    }
+    append_unique_polygon(polygon, intersection_areas, seen_ids);
+  }
+
+  return intersection_areas;
 }
 
 bool is_pose_in_route_lane_polygon(
@@ -246,17 +272,6 @@ std::optional<DrivingDirectionLocalContext> compute_driving_direction_local_cont
   context.in_intersection = std::any_of(
     context.intersection_areas.begin(), context.intersection_areas.end(),
     [&search_point](const auto & polygon) { return point_in_polygon(search_point, polygon); });
-
-  if (!context.in_intersection) {
-    for (const auto & lanelet : context.route_lanelets) {
-      if (
-        autoware::experimental::lanelet2_utils::is_intersection_lanelet(lanelet) &&
-        point_in_lanelet(search_point, lanelet)) {
-        context.in_intersection = true;
-        break;
-      }
-    }
-  }
   return context;
 }
 

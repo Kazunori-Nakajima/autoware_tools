@@ -6,4 +6,4 @@ evaluator_config:
       - /control/control_evaluator/metrics/lateral_deviation_centerline_abs
     exclusion:
       rules:
-        - intersection_lanelet
+        - intersection_area

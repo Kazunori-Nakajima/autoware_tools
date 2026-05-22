@@ -92,6 +92,11 @@ bool try_append_evaluator_metric_message(
   std::map<std::string, std::vector<TimestampedDouble>> & values_by_topic,
   const rclcpp::Logger & logger);
 
+/** @brief Drop odometry samples while ego remains near the first recorded pose (pre-departure). */
+std::vector<std::shared_ptr<Odometry>> filter_odometry_outside_initial_pose(
+  const std::vector<std::shared_ptr<Odometry>> & kinematic_states,
+  double initial_pose_radius_m = 2.0);
+
 std::vector<EvaluatorMetricGroup> build_evaluator_metric_groups(
   const std::vector<EvaluatorConfig> & evaluator_configs,
   std::map<std::string, std::vector<TimestampedDouble>> & values_by_topic,

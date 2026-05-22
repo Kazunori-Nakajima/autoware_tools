@@ -359,8 +359,7 @@ TrajectoryPointMetrics calculate_trajectory_point_metrics(
         lane_keeping_evaluation_points.push_back(
           LaneKeepingEvaluationPoint{
             point.time_from_start, metrics.lateral_deviations[i],
-            autoware::experimental::lanelet2_utils::is_intersection_lanelet(
-              reference_lanelet.value())});
+            is_pose_in_intersection(point.pose, route_handler)});
       }
     }
   }

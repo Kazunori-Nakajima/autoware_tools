@@ -188,14 +188,13 @@ std::vector<std::string> evaluate_exclusions(
 {
   std::vector<std::string> matched_rules;
   for (const auto & rule_name : exclusion_rule_names) {
-    if (rule_name == "intersection_lanelet") {
+    if (rule_name == "intersection_area") {
       if (metrics::is_pose_in_intersection(pose, route_handler)) {
         matched_rules.push_back(rule_name);
       }
     } else {
       throw std::runtime_error(
-        "Unknown evaluator exclusion rule: " + rule_name +
-        ". Supported rules: intersection_lanelet.");
+        "Unknown evaluator exclusion rule: " + rule_name + ". Supported rules: intersection_area.");
     }
   }
   return matched_rules;
@@ -235,6 +234,39 @@ std::vector<EvaluatorMetricMeasurement> build_synced_metric_measurements(
 }
 
 }  // namespace
+
+/** @brief Drop odometry samples while ego remains near the first recorded pose (pre-departure). */
+std::vector<std::shared_ptr<Odometry>> filter_odometry_outside_initial_pose(
+  const std::vector<std::shared_ptr<Odometry>> & kinematic_states,
+  const double initial_pose_radius_m)
+{
+  std::vector<std::shared_ptr<Odometry>> filtered;
+  filtered.reserve(kinematic_states.size());
+
+  std::optional<std::pair<double, double>> initial_xy;
+  for (const auto & odometry : kinematic_states) {
+    if (!odometry) {
+      continue;
+    }
+
+    const double x = odometry->pose.pose.position.x;
+    const double y = odometry->pose.pose.position.y;
+    if (!initial_xy.has_value()) {
+      initial_xy = std::make_pair(x, y);
+      continue;
+    }
+
+    const double dx = x - initial_xy->first;
+    const double dy = y - initial_xy->second;
+    if (std::hypot(dx, dy) < initial_pose_radius_m) {
+      continue;
+    }
+
+    filtered.push_back(odometry);
+  }
+
+  return filtered;
+}
 
 std::vector<EvaluatorConfig> load_evaluator_configs_from_yaml_file(const std::string & path)
 {
@@ -338,6 +370,13 @@ std::vector<EvaluatorMetricGroup> build_evaluator_metric_groups(
   const std::shared_ptr<autoware::route_handler::RouteHandler> & route_handler,
   const double sync_tolerance_ms, const rclcpp::Logger & logger)
 {
+  const auto evaluation_kinematic_states = filter_odometry_outside_initial_pose(kinematic_states);
+  if (evaluation_kinematic_states.empty()) {
+    RCLCPP_INFO(
+      logger, "Evaluator metrics skipped: no odometry samples outside the initial pose radius.");
+    return {};
+  }
+
   for (auto & [topic, values] : values_by_topic) {
     std::sort(values.begin(), values.end(), [](const auto & a, const auto & b) {
       return a.timestamp_ns < b.timestamp_ns;
@@ -365,8 +404,8 @@ std::vector<EvaluatorMetricGroup> build_evaluator_metric_groups(
 
       // Analyze values and sync them to odometry timestamps
       auto measurements = build_synced_metric_measurements(
-        kinematic_states, values_itr->second, route_handler, evaluator_config.exclusion_rules,
-        sync_tolerance_ms);
+        evaluation_kinematic_states, values_itr->second, route_handler,
+        evaluator_config.exclusion_rules, sync_tolerance_ms);
       if (measurements.empty()) {
         continue;
       }

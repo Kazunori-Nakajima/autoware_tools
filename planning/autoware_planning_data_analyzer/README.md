@@ -65,7 +65,9 @@ Aggregation views (per metric key):
 Each view exports `count`, `mean`, `min`, `max`, `percentile_95`, `percentile_99`, and per-metric
 `description` (aggregates of evaluator values recorded in the evaluation rosbag).
 
-Supported exclusion rules: `intersection_lanelet`
+Supported exclusion rules: `intersection_area` (ego pose inside vector-map `intersection_area` polygon)
+
+Odometry samples within 2 m of the first pose (pre-departure waiting) are excluded from aggregation.
 
 ## Quick Start
 

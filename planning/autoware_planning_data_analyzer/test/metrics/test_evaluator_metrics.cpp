@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -34,20 +35,38 @@ EvaluatorMetricMeasurement make_measurement(
   return measurement;
 }
 
-}  // namespace
+std::shared_ptr<Odometry> make_odometry(const double x, const double y)
+{
+  auto odometry = std::make_shared<Odometry>();
+  odometry->pose.pose.position.x = x;
+  odometry->pose.pose.position.y = y;
+  return odometry;
+}
+
+TEST(EvaluatorMetrics, FilterOdometryOutsideInitialPose)
+{
+  const std::vector<std::shared_ptr<Odometry>> kinematic_states = {
+    make_odometry(10.0, 20.0), make_odometry(10.1, 20.0), make_odometry(10.0, 21.5),
+    make_odometry(15.0, 20.0)};
+
+  const auto filtered = filter_odometry_outside_initial_pose(kinematic_states, 2.0);
+  ASSERT_EQ(filtered.size(), 1U);
+  EXPECT_DOUBLE_EQ(filtered.front()->pose.pose.position.x, 15.0);
+  EXPECT_DOUBLE_EQ(filtered.front()->pose.pose.position.y, 20.0);
+}
 
 TEST(EvaluatorMetrics, IncludedWhenIntersectionExcluded)
 {
   const std::vector<EvaluatorMetricMeasurement> measurements = {
-    make_measurement(0.1, {}), make_measurement(2.0, {"intersection_lanelet"}),
+    make_measurement(0.1, {}), make_measurement(2.0, {"intersection_area"}),
     make_measurement(-0.2, {})};
 
   const auto result = aggregate_metric_measurements(
-    measurements, {"intersection_lanelet"}, "lateral_deviation_centerline");
+    measurements, {"intersection_area"}, "lateral_deviation_centerline");
 
   EXPECT_EQ(result.all_stats.count, 3U);
   EXPECT_EQ(result.included_stats.count, 2U);
-  EXPECT_EQ(result.excluded_stats_by_rule.at("intersection_lanelet").count, 1U);
+  EXPECT_EQ(result.excluded_stats_by_rule.at("intersection_area").count, 1U);
 }
 
 TEST(EvaluatorConfig, LoadFromYamlFixture)
@@ -58,20 +77,21 @@ TEST(EvaluatorConfig, LoadFromYamlFixture)
 
   const auto configs = load_evaluator_configs_from_yaml_file(path.string());
   ASSERT_EQ(configs.size(), 1U);
-  EXPECT_EQ(configs.front().exclusion_rules.front(), "intersection_lanelet");
+  EXPECT_EQ(configs.front().exclusion_rules.front(), "intersection_area");
 }
 
 TEST(EvaluatorMetrics, GroupJsonUsesExpectedPaths)
 {
   const auto result = aggregate_metric_measurements(
-    {make_measurement(0.1, {}), make_measurement(1.0, {"intersection_lanelet"})},
-    {"intersection_lanelet"}, "lateral_deviation_centerline");
+    {make_measurement(0.1, {}), make_measurement(1.0, {"intersection_area"})},
+    {"intersection_area"}, "lateral_deviation_centerline");
   const auto json = evaluator_group_aggregations_to_json({result});
 
   EXPECT_TRUE(json.contains("included/lateral_deviation_centerline/mean"));
   EXPECT_TRUE(json.contains("included/lateral_deviation_centerline/percentile_95"));
-  EXPECT_TRUE(json.contains("excluded/intersection_lanelet/lateral_deviation_centerline/count"));
+  EXPECT_TRUE(json.contains("excluded/intersection_area/lateral_deviation_centerline/count"));
   EXPECT_FALSE(json.contains("all/description"));
 }
 
+}  // namespace
 }  // namespace autoware::planning_data_analyzer::metrics::evaluator
