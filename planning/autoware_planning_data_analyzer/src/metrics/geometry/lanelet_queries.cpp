@@ -18,6 +18,7 @@
 
 #include <autoware/lanelet2_utils/geometry.hpp>
 #include <autoware/lanelet2_utils/intersection.hpp>
+#include <autoware_lanelet2_extension/utility/utilities.hpp>
 #include <autoware_utils_geometry/boost_geometry.hpp>
 #include <autoware_utils_math/normalization.hpp>
 
@@ -48,11 +49,6 @@ lanelet::BoundingBox2d point_bounding_box(
   const geometry_msgs::msg::Point & point, const double radius_m = kLocalLaneSearchRadiusM)
 {
   return make_bounding_box(point.x, point.y, point.x, point.y, radius_m);
-}
-
-lanelet::BasicPoint3d to_basic_point3d(const geometry_msgs::msg::Point & point)
-{
-  return lanelet::BasicPoint3d{point.x, point.y, point.z};
 }
 
 bool point_within_lanelet_margin(
@@ -102,13 +98,12 @@ lanelet::ConstLanelets collect_local_route_consistent_lanelets(
     return local_lanelets;
   }
 
-  const double reference_yaw = autoware::experimental::lanelet2_utils::get_lanelet_angle(
-    seed_lanelets.front(), to_basic_point3d(pose.position));
+  const double reference_yaw =
+    lanelet::utils::getLaneletAngle(seed_lanelets.front(), pose.position);
   std::unordered_set<lanelet::Id> local_lanelet_ids;
   for (const auto & lanelet : nearby_road_lanelets) {
     const bool on_route = route_handler->isRouteLanelet(lanelet);
-    const double lanelet_yaw = autoware::experimental::lanelet2_utils::get_lanelet_angle(
-      lanelet, to_basic_point3d(pose.position));
+    const double lanelet_yaw = lanelet::utils::getLaneletAngle(lanelet, pose.position);
     const bool same_direction =
       std::abs(autoware_utils_math::normalize_radian(lanelet_yaw - reference_yaw)) <=
       kDirectionSimilarityThresholdRad;
@@ -119,8 +114,8 @@ lanelet::ConstLanelets collect_local_route_consistent_lanelets(
   }
 
   for (const auto & shoulder_lanelet : nearby_shoulder_lanelets) {
-    const double shoulder_yaw = autoware::experimental::lanelet2_utils::get_lanelet_angle(
-      shoulder_lanelet, to_basic_point3d(pose.position));
+    const double shoulder_yaw =
+      lanelet::utils::getLaneletAngle(shoulder_lanelet, pose.position);
     const bool same_direction =
       std::abs(autoware_utils_math::normalize_radian(shoulder_yaw - reference_yaw)) <=
       kDirectionSimilarityThresholdRad;

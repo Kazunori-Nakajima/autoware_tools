@@ -28,6 +28,7 @@
 #include <autoware/lanelet2_utils/geometry.hpp>
 #include <autoware/lanelet2_utils/intersection.hpp>
 #include <autoware/motion_utils/trajectory/trajectory.hpp>
+#include <autoware_lanelet2_extension/utility/utilities.hpp>
 #include <autoware_utils_geometry/geometry.hpp>
 #include <tf2/LinearMath/Vector3.hpp>
 
@@ -444,9 +445,8 @@ TrajectoryPointMetrics calculate_trajectory_point_metrics(
             std::hypot(point.longitudinal_velocity_mps, point.lateral_velocity_mps),
             metrics.travel_distances[i]});
       } else {
-        metrics.lateral_deviations[i] =
-          autoware::experimental::lanelet2_utils::get_lateral_distance_to_centerline(
-            reference_lanelet.value(), point.pose);
+        metrics.lateral_deviations[i] = lanelet::utils::getLateralDistanceToCenterline(
+          reference_lanelet.value(), point.pose);
         const auto local_context =
           compute_driving_direction_local_context(point.pose, route_handler);
         lane_keeping_evaluation_points.push_back(
