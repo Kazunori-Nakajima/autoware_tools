@@ -309,7 +309,7 @@ StaticCenterlineGeneratorNode::StaticCenterlineGeneratorNode(
     declare_parameter<bool>("consider_no_drivable_lanes");
   default_planner_param_.check_footprint_inside_lanes =
     declare_parameter<bool>("check_footprint_inside_lanes");
-  default_planner_param_.allow_area = declare_parameter<bool>("allow_area", false);
+  // default_planner_param_.allow_area = declare_parameter<bool>("allow_area", false);
 
   centerline_source_ = [&]() {
     const auto centerline_source_param = declare_parameter<std::string>("centerline_source");
